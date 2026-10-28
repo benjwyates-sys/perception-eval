@@ -1,0 +1,9 @@
+[project]
+name = "perception-eval"
+version = "0.1.0"
+description = "Perception evaluation harness: evaluate an off-the-shelf detector on KITTI, slice failures, calibrate confidence."
+requires-python = ">=3.11"
+dependencies = ["ultralytics"]
+
+[tool.uv]
+package = false
