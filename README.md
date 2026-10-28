@@ -31,8 +31,38 @@ Notes:
   CPU; 500 images takes a while, let it run in the background.
 - KITTI is a research benchmark; see the KITTI site for its terms.
 
+## Session 2: metrics harness + visualization
+
+```
+uv run python scripts/evaluate.py   # IoU matching, mAP, slices, calibration
+uv run python scripts/visualize.py  # annotated images + viz/index.html gallery
+```
+
+Outputs:
+
+- `evals/metrics.json` — per-class precision/recall/AP, miss-rate slices by
+  occlusion/truncation/height, calibration bins, ignored-class counts.
+- `viz/` — annotated images (green = ground truth, blue = true positive,
+  red = false positive, gray = unevaluated ground truth, yellow = ignored
+  prediction) + gallery HTML (gitignored, regenerable).
+
+Evaluation classes are Car, Pedestrian, and Cyclist (KITTI's main
+benchmark trio). COCO→KITTI mapping: car→Car, person→Pedestrian (GT
+Pedestrian and Person_sitting grouped — the detector can't tell them
+apart), bicycle→Cyclist. Other COCO predictions and Van/Truck/Tram/Misc
+ground truth are counted as ignored, not scored; the tram gap (no COCO
+equivalent) is a known expected miss.
+
+## Session 3: failure analysis + scorecard
+
+Findings in `evals/SCORECARD.md`: mAP 0.356 — Car AP 0.680, Pedestrian
+0.386, Cyclist 0.003. The cyclist collapse is a mapping artifact
+(rider+bike union box vs bike-only box); the real degradation is clean
+occlusion and size gradients; calibration is good and the confidence
+score is a usable operating dial.
+
 ## What's next
 
-- Session 2: metrics harness — IoU matching, mAP per class, slices by
-  distance/size/occlusion/truncation, calibration curves.
-- Session 3: failure analysis + scorecard.
+- Mapping v2: rider+bike cyclist unions, Van/Truck/Tram scoring.
+- Per-group slices (current slices are pooled across classes).
+- Threshold sweep for the operating point.
