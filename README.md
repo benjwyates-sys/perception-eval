@@ -61,8 +61,20 @@ Findings in `evals/SCORECARD.md`: mAP 0.356 — Car AP 0.680, Pedestrian
 occlusion and size gradients; calibration is good and the confidence
 score is a usable operating dial.
 
+## Session 4: mapping v2 + per-group slices
+
+```
+uv run python scripts/evaluate.py  # mapping v2 by default; --mapping v1 reproduces session 2
+uv run python scripts/visualize.py  # union boxes labeled UNION
+```
+
+Mapping v2: cyclist candidates are person+bicycle union boxes (consumed
+person boxes no longer score as pedestrians); new groups TruckVan (truck
+predictions on Truck+Van ground truth) and Tram (bus+train predictions
+on Tram ground truth); Misc stays unscored. Slices are now per group.
+Threshold sweep held for session 6.
+
 ## What's next
 
-- Mapping v2: rider+bike cyclist unions, Van/Truck/Tram scoring.
-- Per-group slices (current slices are pooled across classes).
-- Threshold sweep for the operating point.
+- Pedestrian-first matching order; cyclist component diagnostic.
+- Session 6: threshold sweep.

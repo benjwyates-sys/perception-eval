@@ -1,8 +1,9 @@
-# Scorecard — perception-eval, sessions 1–3
+# Scorecard — perception-eval, sessions 1–4
 
 Setup: 500-image eval split (seed 42) carved from KITTI's 7,481 labeled
 training images; YOLOv8n off the shelf, no training anywhere; IoU 0.5;
-evaluated groups Car, Pedestrian, Cyclist. Per-image results in
+evaluated groups Car, Pedestrian, Cyclist in v1, plus TruckVan and Tram
+in v2. Per-image results in
 `evals/metrics.json`; annotated images in `viz/` (gitignored).
 
 ## Results
@@ -62,26 +63,73 @@ mAP: 0.356
    a threshold around 0.5 keeps mostly-right predictions and sheds most
    of the false-positive tail.
 
+## Session 4: mapping v2 + per-group slices
+
+Mapping v2 (see README): cyclist unions, TruckVan and Tram groups,
+Misc unscored. Slices now per group. Run with `evaluate.py` default;
+`--mapping v1` reproduces session 2.
+
+| Group | TP | FP | FN | Precision | Recall | AP | n_gt |
+|---|---|---|---|---|---|---|---|
+| Car | 1375 | 754 | 472 | 0.646 | 0.744 | 0.680 | 1847 |
+| Pedestrian | 163 | 192 | 163 | 0.459 | 0.500 | 0.405 | 326 |
+| Cyclist | 17 | 52 | 97 | 0.246 | 0.149 | 0.095 | 114 |
+| TruckVan | 56 | 24 | 176 | 0.700 | 0.241 | 0.194 | 232 |
+| Tram | 9 | 35 | 23 | 0.205 | 0.281 | 0.120 | 32 |
+
+mAP: 0.299 — NOT comparable to session 2's 0.356. The mean is now over
+five groups instead of three, including two hard new ones; Car is
+identical, Pedestrian AP rose, Cyclist AP rose 31×. The drop is
+composition, not decay.
+
+### What v2 proved, and what it exposed
+
+- Cyclist AP 0.003 → 0.095, TP 2 → 17: the union mechanism works and
+  session 3's diagnosis is confirmed. But 97 of 114 cyclists are still
+  missed, and fully visible cyclists are missed 83% of the time
+  (occlusion=0, n=75) — so the remaining failure is detection, not
+  matching. Either the person/bicycle components aren't detected, or
+  unions still fall under 0.5 IoU.
+- Pedestrian AP 0.386 → 0.405: 19 rider false positives vanished, but
+  7 true positives vanished too — greedy IoU > 0 pairing consumes
+  genuine pedestrians standing near bikes. Fix: match Pedestrian
+  ground truth first, then form unions from leftovers.
+- TruckVan precision 0.700 but recall 0.241: most vans are detected as
+  cars, and car predictions can't match TruckVan ground truth. The
+  recall number measures vocabulary coverage, not detector quality.
+  Tram (n=32) is too small a sample for firm conclusions.
+- The 25–40px height band is a cliff across classes: Cyclist miss rate
+  1.000 (n=27), Pedestrian 0.955 (n=44), TruckVan 0.947 (n=75). Small
+  objects, not occluded ones, are this nano detector's real weakness.
+- Ignored ground truth is now just Misc (64); truck/bus/train left the
+  ignored-prediction list, as they should under v2.
+
 ## Caveats
 
 - 500 images, one nano detector, one IoU threshold: this is a baseline
   characterization, not a leaderboard claim.
-- Slices are pooled across groups; class mix confounds the truncation
-  slice (see finding 4) and probably shades the others.
-- Mapping v1 is deliberately narrow (3 groups); Van/Truck/Tram/Misc are
-  unscored by design, and the cyclist mapping is known-broken (finding 1).
+- Session 2's slices were pooled across groups; class mix confounded
+  the truncation slice (see finding 4). Session 4 slices are per group.
+- Mapping v2 covers all classes except Misc, but has known limits:
+  greedy union pairing consumes genuine pedestrian boxes near bikes,
+  and TruckVan/Tram recall measures vocabulary coverage (vans detected
+  as cars) more than detector quality.
 - The gallery (20 images) is qualitative; the numbers above are the claim.
 
 ## Next
 
-- Mapping v2: merge rider+bike boxes into cyclist unions; score
-  Van/Truck/Tram via truck/bus/train predictions.
-- Per-group slices, so occlusion/size effects are separable by class.
-- Threshold sweep for the operating point the calibration curve implies.
+- Pedestrian-first matching: match Pedestrian ground truth before
+  forming cyclist unions, so genuine pedestrians near bikes stop being
+  consumed (session 4 cost 7 pedestrian TPs).
+- Cyclist component diagnostic: for each cyclist ground truth, are a
+  person box and a bicycle box even present nearby? Separates detector
+  blindness from matching failure.
+- Threshold sweep for the operating point (held for session 6).
 
 ## Commands
 
 ```
 uv run python scripts/evaluate.py   # metrics.json + printed table
+uv run python scripts/evaluate.py --mapping v1  # session-2 mapping, for comparison
 uv run python scripts/visualize.py  # viz/index.html gallery
 ```

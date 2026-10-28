@@ -9,12 +9,10 @@ from pathlib import Path
 
 import cv2
 
+from mapping import MAPS, build_gt_groups, build_pred_groups
 from metrics import match_image
 
 ROOT = Path(__file__).resolve().parent.parent
-CLASS_MAP = {"car": "Car", "person": "Pedestrian", "bicycle": "Cyclist"}
-GT_GROUP = {"Car": "Car", "Pedestrian": "Pedestrian", "Person_sitting": "Pedestrian", "Cyclist": "Cyclist"}
-GROUPS = ["Car", "Pedestrian", "Cyclist"]
 
 
 def draw(img, bbox, color, label):
@@ -31,6 +29,7 @@ def main():
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--iou", type=float, default=0.5)
+    ap.add_argument("--mapping", choices=["v1", "v2"], default="v2")
     args = ap.parse_args()
     split = json.loads((ROOT / "evals" / "eval_split.json").read_text())
     gt = json.loads((ROOT / "evals" / "ground_truth.json").read_text())
@@ -50,29 +49,20 @@ def main():
             print(f"missing image {iid}, skipping")
             continue
         gt_objs = gt.get(iid, [])
-        gt_by_group = {g: [] for g in GROUPS}
+        gt_map = MAPS[args.mapping][0]
+        groups = MAPS[args.mapping][2]
+        gt_by_group, _ = build_gt_groups(gt_objs, args.mapping)
+        pred_by_group, ignored_preds = build_pred_groups(preds.get(iid, []), args.mapping)
         for o in gt_objs:
-            g = GT_GROUP.get(o["type"])
-            if g:
-                gt_by_group[g].append(o)
-        pred_by_group = {g: [] for g in GROUPS}
-        ignored_preds = []
-        for p in preds.get(iid, []):
-            g = CLASS_MAP.get(p["class"])
-            if g:
-                pred_by_group[g].append(p)
-            else:
-                ignored_preds.append(p)
-        for o in gt_objs:
-            g = GT_GROUP.get(o["type"])
+            g = gt_map.get(o["type"])
             draw(img, o["bbox"], (0, 180, 0) if g else (128, 128, 128),
                  f"GT {o['type']}" + ("" if g else " (unevaluated)"))
         tp_total = fp_total = 0
-        for g in GROUPS:
+        for g in groups:
             tp_flags, _ = match_image(gt_by_group[g], pred_by_group[g], args.iou)
             for flag, p in zip(tp_flags, pred_by_group[g]):
                 draw(img, p["bbox"], (255, 120, 0) if flag else (0, 0, 255),
-                     f"{p['class']} {p['score']:.2f}" + ("" if flag else " FP"))
+                     f"{p['class']} {p['score']:.2f}" + (" UNION" if p.get("union") else "") + ("" if flag else " FP"))
                 tp_total += int(flag)
                 fp_total += int(not flag)
         for p in ignored_preds:
