@@ -74,7 +74,20 @@ predictions on Truck+Van ground truth) and Tram (bus+train predictions
 on Tram ground truth); Misc stays unscored. Slices are now per group.
 Threshold sweep held for session 6.
 
+## Session 5: IoU threshold calibration + optimization
+
+```
+uv run python scripts/sweep_iou.py  # IoU 0.3–0.7, per-group AP + F1-optimal thresholds
+```
+
+The IoU threshold is an evaluation knob (how strictly a prediction must
+localize to count as a hit), not a deployment knob — that one is the
+confidence threshold (session 6). The sweep reports per-group
+precision/recall/AP at each threshold, the F1-optimal threshold per
+group, and calibration bins per threshold, so we can see which
+conclusions survive stricter or looser scoring.
+
 ## What's next
 
 - Pedestrian-first matching order; cyclist component diagnostic.
-- Session 6: threshold sweep.
+- Session 6: confidence threshold sweep (operating points).

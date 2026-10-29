@@ -1,4 +1,4 @@
-# Scorecard — perception-eval, sessions 1–4
+# Scorecard — perception-eval, sessions 1–5
 
 Setup: 500-image eval split (seed 42) carved from KITTI's 7,481 labeled
 training images; YOLOv8n off the shelf, no training anywhere; IoU 0.5;
@@ -104,6 +104,48 @@ composition, not decay.
 - Ignored ground truth is now just Misc (64); truck/bus/train left the
   ignored-prediction list, as they should under v2.
 
+## Session 5: IoU threshold sweep (calibration + optimization)
+
+Sweep of the IoU matching bar, mapping v2, 0.3–0.7 (`sweep_iou.py`;
+results in `evals/iou_sweep.json`). The IoU threshold is an evaluation
+knob (scoring strictness), not a deployment knob — the deployment dial
+is the confidence threshold (session 6).
+
+| IoU | Car | Pedestrian | Cyclist | TruckVan | Tram | mAP |
+|---|---|---|---|---|---|---|
+| 0.3 | 0.750 | 0.469 | 0.103 | 0.198 | 0.129 | 0.330 |
+| 0.4 | 0.724 | 0.452 | 0.103 | 0.198 | 0.129 | 0.321 |
+| 0.5 | 0.680 | 0.405 | 0.095 | 0.194 | 0.120 | 0.299 |
+| 0.6 | 0.596 | 0.344 | 0.063 | 0.176 | 0.102 | 0.256 |
+| 0.7 | 0.483 | 0.216 | 0.030 | 0.154 | 0.036 | 0.184 |
+
+### What the sweep showed
+
+- Group ranking Car > Pedestrian > TruckVan > Tram > Cyclist is
+  identical at every threshold: the session 3/4 conclusions do not
+  depend on the 0.5 bar.
+- Cyclist, TruckVan, and Tram precision/recall are identical at 0.3 and
+  0.4: those groups have essentially no matches with IoU in [0.3, 0.4).
+  Matches either localize decently (0.4+) or miss entirely — unions
+  that match are not borderline; cyclist failures are missing
+  components, not sloppy unions. Collapse comes only at strict bars.
+- Relative AP drop 0.3→0.7: Tram −72%, Cyclist −71%, Pedestrian −54%,
+  Car −36%, TruckVan −22%. IoU is a ratio, so pixel error hurts small
+  boxes most (pedestrians) and big truck boxes least; Tram's drop is
+  noisy (n=32). Car stays best at every threshold, even 0.483 at 0.7.
+- F1-optimal threshold is 0.3 for every group — the edge of the swept
+  range, not an interior optimum. Every metric here prefers lenient
+  scoring, because lowering the bar manufactures true positives.
+  Reporting at 0.3 would game the evaluation, not improve the detector.
+  Keep the KITTI-standard 0.5 anchor (also near the curve's knee: gentle
+  0.3→0.5, steep after) and report the curve alongside it.
+- Calibration shape survives at every threshold (accuracy rises with
+  confidence throughout), but the whole curve shifts down as the bar
+  rises: the 0.5–0.6 confidence bin goes 0.762 (IoU 0.3) → 0.686 (0.5) →
+  0.439 (0.7). Session 3's 'well calibrated' verdict is bar-dependent.
+  The 0.9–1.0 bin is invariant at 0.964 accuracy at every threshold:
+  the most confident predictions are also the best localized.
+
 ## Caveats
 
 - 500 images, one nano detector, one IoU threshold: this is a baseline
@@ -124,12 +166,13 @@ composition, not decay.
 - Cyclist component diagnostic: for each cyclist ground truth, are a
   person box and a bicycle box even present nearby? Separates detector
   blindness from matching failure.
-- Threshold sweep for the operating point (held for session 6).
+- Confidence threshold sweep for the operating point (session 6).
 
 ## Commands
 
 ```
 uv run python scripts/evaluate.py   # metrics.json + printed table
 uv run python scripts/evaluate.py --mapping v1  # session-2 mapping, for comparison
+uv run python scripts/sweep_iou.py  # IoU 0.3–0.7 sweep -> evals/iou_sweep.json
 uv run python scripts/visualize.py  # viz/index.html gallery
 ```
