@@ -87,7 +87,19 @@ precision/recall/AP at each threshold, the F1-optimal threshold per
 group, and calibration bins per threshold, so we can see which
 conclusions survive stricter or looser scoring.
 
+## Session 6: confidence threshold sweep (operating points)
+
+```
+uv run python scripts/sweep_conf.py  # conf 0.25–0.8, per-group F1 + F1-optimal thresholds
+```
+
+Unlike session 5's IoU sweep (a scoring knob), the confidence threshold
+is a deployment knob: it decides which boxes survive at all. The sweep
+reports per-group precision/recall/F1 at each threshold (IoU 0.5,
+mapping v2) plus the F1-optimal threshold per group, to pick an
+operating point — one global threshold (YOLO's default shape) versus
+per-class thresholds (custom post-processing).
+
 ## What's next
 
-- Pedestrian-first matching order; cyclist component diagnostic.
-- Session 6: confidence threshold sweep (operating points).
+- Pedestrian-first matching order; cyclist component diagnostic (session 7 candidates).

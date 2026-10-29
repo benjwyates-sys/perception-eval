@@ -1,4 +1,4 @@
-# Scorecard — perception-eval, sessions 1–5
+# Scorecard — perception-eval, sessions 1–6
 
 Setup: 500-image eval split (seed 42) carved from KITTI's 7,481 labeled
 training images; YOLOv8n off the shelf, no training anywhere; IoU 0.5;
@@ -146,10 +146,66 @@ is the confidence threshold (session 6).
   The 0.9–1.0 bin is invariant at 0.964 accuracy at every threshold:
   the most confident predictions are also the best localized.
 
+## Session 6: confidence threshold sweep (operating points)
+
+Sweep of the confidence threshold, IoU 0.5, mapping v2, 0.25–0.8
+(`sweep_conf.py`; results in `evals/conf_sweep.json`). Unlike session
+5's IoU sweep (a scoring knob), this is a deployment knob: it decides
+which boxes survive at all. F1 leads this analysis; AP at each
+threshold is a truncated-list AP (the ranked list just ends earlier),
+so it falls monotonically and is secondary.
+
+| Conf | Car | Pedestrian | Cyclist | TruckVan | Tram | mAP | n_pred |
+|---|---|---|---|---|---|---|---|
+| 0.25 | 0.692 | 0.479 | 0.186 | 0.359 | 0.237 | 0.299 | 2931 |
+| 0.3 | 0.709 | 0.493 | 0.206 | 0.337 | 0.277 | 0.290 | 2499 |
+| 0.4 | 0.714 | 0.520 | 0.189 | 0.261 | 0.262 | 0.263 | 1941 |
+| 0.5 | 0.688 | 0.524 | 0.191 | 0.189 | 0.264 | 0.241 | 1521 |
+| 0.6 | 0.607 | 0.470 | 0.157 | 0.142 | 0.250 | 0.195 | 1137 |
+| 0.7 | 0.485 | 0.377 | 0.115 | 0.082 | 0.195 | 0.139 | 771 |
+| 0.8 | 0.321 | 0.182 | 0.050 | 0.050 | 0.154 | 0.074 | 429 |
+
+F1-optimal per group: Car 0.4 (0.714), Pedestrian 0.5 (0.524),
+Cyclist 0.3 (0.206), TruckVan 0.25 (0.359), Tram 0.3 (0.277).
+
+### What the sweep showed
+
+- Real interior optima this time, unlike session 5's edge answer:
+  Car peaks at 0.4, Pedestrian at 0.5. Raising the bar genuinely trades
+  precision for recall, so F1 peaks in the middle.
+- Car is a plateau, not a peak: F1 0.709 (0.3), 0.714 (0.4), 0.688
+  (0.5). At 0.3 it is almost perfectly balanced (precision 0.708,
+  recall 0.709). Any of 0.3–0.5 is defensible for cars.
+- Pedestrian's F1 optimum (0.5) and safety optimum differ: F1 is
+  0.524 at 0.5 versus 0.520 at 0.4, while recall is 0.417 versus 0.457.
+  Moving to 0.4 buys four points of recall for essentially free — and
+  F1 weights a false alarm and a miss equally, which safety does not.
+  The safety-weighted pedestrian choice is 0.4, arguably 0.3.
+- Cyclist F1 is nearly flat across 0.25–0.5 (0.186–0.206): no
+  confidence threshold fixes cyclists. From 0.25 to 0.3, cyclist recall
+  does not move (0.149 both) while precision jumps 0.246 → 0.333 — the
+  low-confidence cyclist predictions being pruned are pure false
+  positives. By 0.5 only 22 cyclist predictions remain of 69.
+- TruckVan's F1 falls monotonically from 0.25 onward (edge optimum):
+  precision is already 0.700 at the default while recall collapses
+  (0.241 → 0.026 by 0.8). Thresholding cannot fix a vocabulary problem
+  — its misses are vans detected as cars (session 4).
+- Tram is flat and noisy (F1 0.237–0.277 across 0.25–0.6, peak 0.3);
+  with n=32, build no recommendation on it.
+- Global recommendation: 0.3. Mean F1 across groups peaks at 0.3
+  (0.404), ahead of 0.25 (0.391), 0.4 (0.389), and 0.5 (0.371). The
+  sweep mostly validates YOLO's 0.25 default rather than overturning
+  it. Per-group thresholds (0.4/0.5/0.3/0.25/0.3) buy a little but are
+  custom post-processing, not YOLO-native — a complexity cost.
+- Session 3's 'threshold around 0.5' hint is refined, not refuted:
+  0.5 is Pedestrian's F1 optimum and inside Car's plateau, but
+  globally 0.3 wins.
+
 ## Caveats
 
-- 500 images, one nano detector, one IoU threshold: this is a baseline
-  characterization, not a leaderboard claim.
+- 500 images, one nano detector, IoU 0.5 anchor with a 0.3–0.7
+  sensitivity sweep: this is a baseline characterization, not a
+  leaderboard claim.
 - Session 2's slices were pooled across groups; class mix confounded
   the truncation slice (see finding 4). Session 4 slices are per group.
 - Mapping v2 covers all classes except Misc, but has known limits:
@@ -166,7 +222,6 @@ is the confidence threshold (session 6).
 - Cyclist component diagnostic: for each cyclist ground truth, are a
   person box and a bicycle box even present nearby? Separates detector
   blindness from matching failure.
-- Confidence threshold sweep for the operating point (session 6).
 
 ## Commands
 
@@ -174,5 +229,6 @@ is the confidence threshold (session 6).
 uv run python scripts/evaluate.py   # metrics.json + printed table
 uv run python scripts/evaluate.py --mapping v1  # session-2 mapping, for comparison
 uv run python scripts/sweep_iou.py  # IoU 0.3–0.7 sweep -> evals/iou_sweep.json
+uv run python scripts/sweep_conf.py  # conf 0.25–0.8 sweep -> evals/conf_sweep.json
 uv run python scripts/visualize.py  # viz/index.html gallery
 ```
