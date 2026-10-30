@@ -1,0 +1,116 @@
+{
+  "buckets": {
+    "both": {
+      "n": 20,
+      "matched": 17
+    },
+    "person_only": {
+      "n": 33,
+      "matched": 0
+    },
+    "bike_only": {
+      "n": 1,
+      "matched": 0
+    },
+    "neither": {
+      "n": 60,
+      "matched": 0
+    }
+  },
+  "by_height": {
+    "person_only": {
+      "40+": {
+        "n": 33,
+        "matched": 0
+      }
+    },
+    "both": {
+      "40+": {
+        "n": 20,
+        "matched": 17
+      }
+    },
+    "neither": {
+      "40+": {
+        "n": 30,
+        "matched": 0
+      },
+      "25-40": {
+        "n": 27,
+        "matched": 0
+      },
+      "<25": {
+        "n": 3,
+        "matched": 0
+      }
+    },
+    "bike_only": {
+      "40+": {
+        "n": 1,
+        "matched": 0
+      }
+    }
+  },
+  "by_occlusion": {
+    "person_only": {
+      "0": {
+        "n": 24,
+        "matched": 0
+      },
+      "1": {
+        "n": 3,
+        "matched": 0
+      },
+      "3": {
+        "n": 5,
+        "matched": 0
+      },
+      "2": {
+        "n": 1,
+        "matched": 0
+      }
+    },
+    "both": {
+      "0": {
+        "n": 14,
+        "matched": 13
+      },
+      "2": {
+        "n": 2,
+        "matched": 2
+      },
+      "1": {
+        "n": 2,
+        "matched": 0
+      },
+      "3": {
+        "n": 2,
+        "matched": 2
+      }
+    },
+    "neither": {
+      "0": {
+        "n": 37,
+        "matched": 0
+      },
+      "3": {
+        "n": 11,
+        "matched": 0
+      },
+      "1": {
+        "n": 10,
+        "matched": 0
+      },
+      "2": {
+        "n": 2,
+        "matched": 0
+      }
+    },
+    "bike_only": {
+      "1": {
+        "n": 1,
+        "matched": 0
+      }
+    }
+  }
+}

@@ -100,6 +100,20 @@ mapping v2) plus the F1-optimal threshold per group, to pick an
 operating point — one global threshold (YOLO's default shape) versus
 per-class thresholds (custom post-processing).
 
+## Session 7: pedestrian-first matching (mapping v3) + cyclist diagnostic
+
+```
+uv run python scripts/evaluate.py --mapping v3 --output evals/metrics_v3.json  # v3 table
+uv run python scripts/diagnose_cyclist.py  # component buckets -> evals/cyclist_diagnostic.json
+```
+
+Mapping v3: Pedestrian ground truth claims its person boxes before
+unions form, so genuine pedestrians near bikes stop being consumed
+(session 4 cost 7 pedestrian TPs). The diagnostic sorts each of the 114
+cyclist ground truths by whether person and/or bicycle boxes even
+overlap it, cross-tabbed with v2 matched/unmatched, to separate
+detector blindness from matching failure.
+
 ## What's next
 
-- Pedestrian-first matching order; cyclist component diagnostic (session 7 candidates).
+- Adopt v3 as the default mapping; low-confidence predict rerun to check 'neither'.

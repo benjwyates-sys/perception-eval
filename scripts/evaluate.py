@@ -2,10 +2,14 @@
 
 --mapping v2 (default): cyclist unions, TruckVan + Tram groups.
 --mapping v1: session-2 mapping, for comparison.
+--mapping v3 (session 7): grouping identical to v2, but Pedestrian
+ground truth claims its person boxes BEFORE unions form, so a genuine
+pedestrian standing near a bike can no longer be consumed by a union.
 Slices are per group: occlusion, truncation, height band.
 
-`evaluate()` is importable so scripts/sweep_iou.py can loop thresholds
-without re-running the detector."""
+`evaluate()` is importable so scripts/sweep_iou.py and
+scripts/sweep_conf.py can loop thresholds without re-running the
+detector."""
 import argparse
 import json
 from pathlib import Path
@@ -31,12 +35,60 @@ def evaluate(gt, preds, mapping, iou_threshold):
     ignored_pred = {}
     for iid, gt_objs in gt.items():
         gt_by_group, ig = build_gt_groups(gt_objs, mapping)
-        pred_by_group, ip = build_pred_groups(preds.get(iid, []), mapping)
+        image_preds = preds.get(iid, [])
+        ped_matched = None
+        claimed = set()
+        person_preds = []
+        if mapping == "v3":
+            # Pedestrian-first: Pedestrian GT claims its person boxes
+            # before unions form. Claimed persons leave the pool, so
+            # unions form only from leftovers.
+            person_preds = [p for p in image_preds if p["class"] == "person"]
+            _, ped_matched = match_image(gt_by_group["Pedestrian"], person_preds, iou_threshold)
+            claimed = set(ped_matched.keys())
+            remaining = []
+            person_i = 0
+            for p in image_preds:
+                if p["class"] == "person":
+                    if person_i not in claimed:
+                        remaining.append(p)
+                    person_i += 1
+                else:
+                    remaining.append(p)
+            pred_by_group, ip = build_pred_groups(remaining, mapping)
+        else:
+            pred_by_group, ip = build_pred_groups(image_preds, mapping)
         for o in ig:
             ignored_gt[o["type"]] = ignored_gt.get(o["type"], 0) + 1
         for p in ip:
             ignored_pred[p["class"]] = ignored_pred.get(p["class"], 0) + 1
         for g in groups:
+            if mapping == "v3" and g == "Pedestrian":
+                # Pedestrian stats come from the first-pass match:
+                # claimed persons are TPs; leftover non-union persons
+                # are FPs (greedy matching guarantees no leftover
+                # person matches a free Pedestrian GT).
+                s = stats[g]
+                s["tp"] += len(claimed)
+                s["fp"] += len(pred_by_group[g])
+                matched_gt = set(ped_matched.values())
+                s["fn"] += len(gt_by_group[g]) - len(matched_gt)
+                for i, p in enumerate(person_preds):
+                    if i in claimed:
+                        s["scores"].append(p["score"])
+                        s["tp_flags"].append(True)
+                for p in pred_by_group[g]:
+                    s["scores"].append(p["score"])
+                    s["tp_flags"].append(False)
+                for j, o in enumerate(gt_by_group[g]):
+                    missed = j not in matched_gt
+                    for key, val in (("occlusion", str(o["occluded"])),
+                                     ("truncation", "none" if o["truncated"] == 0 else "partial"),
+                                     ("height", height_band(o["bbox"]))):
+                        d = slices[g][key].setdefault(val, {"n": 0, "missed": 0})
+                        d["n"] += 1
+                        d["missed"] += int(missed)
+                continue
             tp_flags, matched = match_image(gt_by_group[g], pred_by_group[g], iou_threshold)
             s = stats[g]
             s["tp"] += sum(tp_flags)
@@ -113,7 +165,7 @@ def main():
     ap.add_argument("--pred", default="evals/predictions.json")
     ap.add_argument("--output", default="evals/metrics.json")
     ap.add_argument("--iou", type=float, default=0.5)
-    ap.add_argument("--mapping", choices=["v1", "v2"], default="v2")
+    ap.add_argument("--mapping", choices=["v1", "v2", "v3"], default="v2")
     args = ap.parse_args()
     gt = json.loads((ROOT / args.gt).read_text())
     preds = json.loads((ROOT / args.pred).read_text())

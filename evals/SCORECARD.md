@@ -1,4 +1,4 @@
-# Scorecard — perception-eval, sessions 1–6
+# Scorecard — perception-eval, sessions 1–7
 
 Setup: 500-image eval split (seed 42) carved from KITTI's 7,481 labeled
 training images; YOLOv8n off the shelf, no training anywhere; IoU 0.5;
@@ -201,6 +201,68 @@ Cyclist 0.3 (0.206), TruckVan 0.25 (0.359), Tram 0.3 (0.277).
   0.5 is Pedestrian's F1 optimum and inside Car's plateau, but
   globally 0.3 wins.
 
+## Session 7: pedestrian-first matching (mapping v3) + cyclist diagnostic
+
+Mapping v3 (same grouping as v2; Pedestrian ground truth claims its
+person boxes before unions form) plus `diagnose_cyclist.py`, which sorts
+each cyclist ground truth by whether person and/or bicycle boxes even
+overlap it. v3 run: `evaluate.py --mapping v3 --output
+ evals/metrics_v3.json` (v2's `metrics.json` preserved).
+
+| Group | TP | FP | FN | Precision | Recall | AP | n_gt |
+|---|---|---|---|---|---|---|---|
+| Car | 1375 | 754 | 472 | 0.646 | 0.744 | 0.680 | 1847 |
+| Pedestrian | 170 | 192 | 156 | 0.470 | 0.521 | 0.430 | 326 |
+| Cyclist | 16 | 53 | 98 | 0.232 | 0.140 | 0.127 | 114 |
+| TruckVan | 56 | 24 | 176 | 0.700 | 0.241 | 0.194 | 232 |
+| Tram | 9 | 35 | 23 | 0.205 | 0.281 | 0.120 | 32 |
+
+mAP: 0.310 (comparable to v2's 0.299 — same five groups).
+
+### Pedestrian-first: criteria passed
+
+- Pedestrian TP 163 → 170, FN 163 → 156, FP unchanged: all seven
+  session-4 TPs recovered, back to v1 levels, while keeping unions.
+  Pedestrian AP 0.405 → 0.430.
+- Cyclist TP 17 → 16, FP 52 → 53: the mirror hazard cost exactly one
+  TP, as predicted (a rider box claimed by a Pedestrian GT at IoU ≥
+  0.5, leaving its bike unpaired). Pre-stated criterion was cyclist
+  down by less than pedestrian up: passed clearly.
+- Cyclist AP still rose, 0.095 → 0.127: the lost TP was low-ranked,
+  and removing a low-precision term raises the average of the rest.
+- Recommendation: v3 becomes the new default mapping. It dominates v2
+  everywhere except that single cyclist TP. (The code default is still
+  v2; flipping it is a one-line change.)
+
+### Cyclist diagnostic: detector blindness, measured
+
+Buckets per cyclist ground truth (present = a box of that class
+ overlaps the GT box at IoU > 0; matched = under v2, IoU 0.5):
+
+| Bucket | n | matched | missed |
+|---|---|---|---|
+| both | 20 | 17 | 3 |
+| person_only | 33 | 0 | 33 |
+| bike_only | 1 | 0 | 1 |
+| neither | 60 | 0 | 60 |
+
+- Of the 97 v2 cyclist misses, 94 lack at least one component: 60
+  neither (62%), 33 person-only (34%), 1 bike-only. The residual
+  matching problem is 3 cases (both present but missed: 1× occlusion
+  0, 2× occlusion 1 — partly-occluded unions failing).
+- Below 40px the detector is completely blind: all 27 cyclists in the
+  25–40 band and all 3 under 25 have neither component. No matching or
+  threshold work touches this; it is a resolution/small-object story.
+- person_only is all 40+ and mostly fully visible (24 of 33 at
+  occlusion 0): the rider is found, the bike is not, on large clear
+  cyclists. Hypothesis: COCO's bicycle class is trained mostly on
+  standalone/parked bikes, and a bike with a rider on it (frame
+  occluded by legs and torso) looks different enough to be skipped.
+- Caveats: buckets use IoU > 0, so adjacent-but-non-overlapping boxes
+  count as absent; the diagnostic sees saved predictions only (conf
+  ≥ 0.25). A low-confidence predict rerun is the cheap check on
+  whether 'neither' shrinks.
+
 ## Caveats
 
 - 500 images, one nano detector, IoU 0.5 anchor with a 0.3–0.7
@@ -208,20 +270,18 @@ Cyclist 0.3 (0.206), TruckVan 0.25 (0.359), Tram 0.3 (0.277).
   leaderboard claim.
 - Session 2's slices were pooled across groups; class mix confounded
   the truncation slice (see finding 4). Session 4 slices are per group.
-- Mapping v2 covers all classes except Misc, but has known limits:
-  greedy union pairing consumes genuine pedestrian boxes near bikes,
-  and TruckVan/Tram recall measures vocabulary coverage (vans detected
+- Mapping v3 covers all classes except Misc, but has known limits:
+  pedestrian-first still allows a rider box to be claimed by a
+  Pedestrian GT at IoU ≥ 0.5 (cost 1 cyclist TP in session 7), and
+  TruckVan/Tram recall measures vocabulary coverage (vans detected
   as cars) more than detector quality.
 - The gallery (20 images) is qualitative; the numbers above are the claim.
 
 ## Next
 
-- Pedestrian-first matching: match Pedestrian ground truth before
-  forming cyclist unions, so genuine pedestrians near bikes stop being
-  consumed (session 4 cost 7 pedestrian TPs).
-- Cyclist component diagnostic: for each cyclist ground truth, are a
-  person box and a bicycle box even present nearby? Separates detector
-  blindness from matching failure.
+- Adopt v3 as the default mapping (one-line change in evaluate.py).
+- Low-confidence predict rerun (below 0.25) to check whether the
+  diagnostic's 'neither' bucket shrinks.
 
 ## Commands
 
@@ -230,5 +290,7 @@ uv run python scripts/evaluate.py   # metrics.json + printed table
 uv run python scripts/evaluate.py --mapping v1  # session-2 mapping, for comparison
 uv run python scripts/sweep_iou.py  # IoU 0.3–0.7 sweep -> evals/iou_sweep.json
 uv run python scripts/sweep_conf.py  # conf 0.25–0.8 sweep -> evals/conf_sweep.json
+uv run python scripts/evaluate.py --mapping v3 --output evals/metrics_v3.json  # v3 table
+uv run python scripts/diagnose_cyclist.py  # component buckets -> evals/cyclist_diagnostic.json
 uv run python scripts/visualize.py  # viz/index.html gallery
 ```

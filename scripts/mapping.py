@@ -10,7 +10,13 @@ union box scored as a Cyclist candidate; the consumed person box no
 longer scores as a pedestrian, and the paired bicycle box is consumed
 too. Unpaired bicycle boxes stay Cyclist candidates as before. New
 groups: TruckVan (GT Truck + Van, preds truck) and Tram (GT Tram, preds
-bus + train). Misc stays unscored."""
+bus + train). Misc stays unscored.
+
+v3 (session 7): grouping identical to v2. The difference is matching
+order, which lives in evaluate.py, not here: Pedestrian ground truth
+claims its person boxes BEFORE unions form, so a genuine pedestrian
+standing near a bike can no longer be consumed by a union. Unions form
+only from leftover person boxes."""
 from metrics import iou
 
 GT_MAP_V1 = {"Car": "Car", "Pedestrian": "Pedestrian", "Person_sitting": "Pedestrian", "Cyclist": "Cyclist"}
@@ -21,7 +27,8 @@ GT_MAP_V2 = dict(GT_MAP_V1, Truck="TruckVan", Van="TruckVan", Tram="Tram")
 PRED_MAP_V2 = dict(PRED_MAP_V1, truck="TruckVan", bus="Tram", train="Tram")
 GROUPS_V2 = ["Car", "Pedestrian", "Cyclist", "TruckVan", "Tram"]
 
-MAPS = {"v1": (GT_MAP_V1, PRED_MAP_V1, GROUPS_V1), "v2": (GT_MAP_V2, PRED_MAP_V2, GROUPS_V2)}
+MAPS = {"v1": (GT_MAP_V1, PRED_MAP_V1, GROUPS_V1), "v2": (GT_MAP_V2, PRED_MAP_V2, GROUPS_V2),
+        "v3": (GT_MAP_V2, PRED_MAP_V2, GROUPS_V2)}
 
 
 def build_gt_groups(gt_objs, version):
@@ -70,7 +77,7 @@ def build_pred_groups(preds, version):
     _, pred_map, groups = MAPS[version]
     by_group = {g: [] for g in groups}
     ignored = []
-    if version == "v2":
+    if version in ("v2", "v3"):
         persons = [p for p in preds if p["class"] == "person"]
         bicycles = [p for p in preds if p["class"] == "bicycle"]
         unions, used_p, used_b = _cyclist_unions(persons, bicycles)
